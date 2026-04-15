@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
 import { downloadPdfFromStorageOrGenerate } from '../lib/pdfGenerator'
 
@@ -92,7 +92,7 @@ export default function AdminPage() {
                 const isExpanded = expandedRowId === record.id
                 
                 return (
-                  <React.Fragment key={record.id}>
+                  <Fragment key={record.id}>
                     <tr style={{ borderBottom: '1px solid #eee' }}>
                       <td style={{ padding: '12px' }}>{dateStr}</td>
                       <td style={{ padding: '12px', fontWeight: 'bold' }}>{record.name || '—'}</td>
@@ -124,7 +124,7 @@ export default function AdminPage() {
                         </td>
                       </tr>
                     )}
-                  </React.Fragment>
+                  </Fragment>
                 )
               })}
             </tbody>
