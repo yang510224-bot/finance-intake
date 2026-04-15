@@ -95,25 +95,25 @@ export default async function handler(req, res) {
 
   console.log('[submit] saved id =', row.id)
 
-  if (process.env.LINE_NOTIFY_TOKEN) {
+  if (process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_ADMIN_USER_ID) {
     try {
       const dateStr = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
-      const message = `\n📋 新的財務整聊問卷！\n姓名：${d.name || '-'}\n電話：${d.phone || '-'}\nLINE ID：${d.line_id || '-'}\n最想解決：${d.primary_goal || '-'}\n填寫時間：${dateStr}\n查看完整資料：https://finance-intake.vercel.app/admin`
-      
-      const params = new URLSearchParams()
-      params.append('message', message)
+      const text = `📋 新問卷通知！\n\n姓名：${d.name || '-'}\n電話：${d.phone || '-'}\nLINE ID：${d.line_id || '-'}\n最想解決：${d.primary_goal || '-'}\n填寫時間：${dateStr}\n\n查看完整資料：\nhttps://finance-intake.vercel.app/admin`
 
-      await fetch('https://notify-api.line.me/api/notify', {
+      await fetch('https://api.line.me/v2/bot/message/push', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Bearer ${process.env.LINE_NOTIFY_TOKEN}`
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`
         },
-        body: params.toString()
+        body: JSON.stringify({
+          to: process.env.LINE_ADMIN_USER_ID,
+          messages: [{ type: 'text', text }]
+        })
       })
-      console.log('[submit] LINE Notify sent')
+      console.log('[submit] LINE Messaging API push sent')
     } catch (err) {
-      console.error('[submit] LINE Notify failed:', err)
+      console.error('[submit] LINE Messaging API push failed:', err)
     }
   }
 
