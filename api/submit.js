@@ -117,9 +117,8 @@ async function generateReport(id, body) {
       console.log('[generate] Report saved, id =', id)
     }
   } catch (err) {
-    console.error('[generate] Claude error for id =', id, err?.message)
-    // Mark as ready=false so report page keeps polling
-    // (or you could save an error placeholder)
+    console.error('[generate] Claude error for id =', id,
+      JSON.stringify({ message: err?.message, status: err?.status, error: err?.error }))
   }
 }
 
