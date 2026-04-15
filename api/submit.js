@@ -94,5 +94,28 @@ export default async function handler(req, res) {
   }
 
   console.log('[submit] saved id =', row.id)
+
+  if (process.env.LINE_NOTIFY_TOKEN) {
+    try {
+      const dateStr = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
+      const message = `\n📋 新的財務整聊問卷！\n姓名：${d.name || '-'}\n電話：${d.phone || '-'}\nLINE ID：${d.line_id || '-'}\n最想解決：${d.primary_goal || '-'}\n填寫時間：${dateStr}\n查看完整資料：https://finance-intake.vercel.app/admin`
+      
+      const params = new URLSearchParams()
+      params.append('message', message)
+
+      await fetch('https://notify-api.line.me/api/notify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Bearer ${process.env.LINE_NOTIFY_TOKEN}`
+        },
+        body: params.toString()
+      })
+      console.log('[submit] LINE Notify sent')
+    } catch (err) {
+      console.error('[submit] LINE Notify failed:', err)
+    }
+  }
+
   return res.status(200).json({ id: row.id })
 }
