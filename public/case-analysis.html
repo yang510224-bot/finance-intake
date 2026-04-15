@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>家庭財務危機 — 案例分析報告</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --card: #1a2235;
+    --border: rgba(255,255,255,0.08);
+    --accent: #3b82f6;
+    --accent2: #8b5cf6;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'PingFang TC', 'Noto Sans TC', sans-serif; min-height: 100vh; }
+
+  /* Header */
+  .header { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); padding: 40px 40px 30px; border-bottom: 1px solid var(--border); }
+  .header-tag { display: inline-block; background: rgba(59,130,246,0.15); color: var(--accent); border: 1px solid rgba(59,130,246,0.3); border-radius: 20px; padding: 4px 14px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  .header p { color: var(--muted); font-size: 14px; }
+  .header-meta { display: flex; gap: 24px; margin-top: 20px; }
+  .meta-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .meta-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Nav Tabs */
+  .nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 40px; display: flex; gap: 0; overflow-x: auto; }
+  .nav button { background: none; border: none; color: var(--muted); padding: 16px 20px; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.2s; font-weight: 500; }
+  .nav button:hover { color: var(--text); }
+  .nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Content */
+  .content { padding: 32px 40px; max-width: 1200px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card-title .icon { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+
+  /* Stat Cards */
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 28px; font-weight: 700; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* People Cards */
+  .people-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  .person-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .person-avatar { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 12px; }
+  .person-name { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .person-role { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .person-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+  .tag-red { background: rgba(239,68,68,0.15); color: #fca5a5; }
+  .tag-green { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+  .tag-blue { background: rgba(59,130,246,0.15); color: #93c5fd; }
+  .tag-yellow { background: rgba(245,158,11,0.15); color: #fcd34d; }
+  .tag-purple { background: rgba(139,92,246,0.15); color: #c4b5fd; }
+
+  /* Risk Table */
+  .risk-table { width: 100%; border-collapse: collapse; }
+  .risk-table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .risk-table td { padding: 14px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 14px; vertical-align: top; }
+  .risk-table tr:last-child td { border-bottom: none; }
+  .risk-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .risk-high { background: rgba(239,68,68,0.15); color: #fca5a5; }
+  .risk-mid { background: rgba(245,158,11,0.15); color: #fcd34d; }
+  .risk-low { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 28px; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+  .tl-item { position: relative; margin-bottom: 24px; }
+  .tl-dot { position: absolute; left: -24px; top: 4px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid; }
+  .tl-dot.blue { background: var(--accent); border-color: var(--accent); }
+  .tl-dot.green { background: var(--green); border-color: var(--green); }
+  .tl-dot.yellow { background: var(--yellow); border-color: var(--yellow); }
+  .tl-dot.purple { background: var(--accent2); border-color: var(--accent2); }
+  .tl-step { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tl-title { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+  .tl-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  /* Scenario Cards */
+  .scenario-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 12px; }
+  .scenario-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .scenario-title { font-weight: 600; font-size: 15px; }
+  .scenario-verdict { font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 600; }
+  .verdict-best { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+  .verdict-ok { background: rgba(245,158,11,0.15); color: #fcd34d; }
+  .verdict-bad { background: rgba(239,68,68,0.15); color: #fca5a5; }
+  .outcome-list { list-style: none; }
+  .outcome-list li { font-size: 13px; color: var(--muted); padding: 4px 0; display: flex; gap: 8px; line-height: 1.5; }
+  .outcome-list li::before { content: '→'; color: var(--accent); flex-shrink: 0; }
+
+  /* Insight Cards */
+  .insight-section { margin-bottom: 28px; }
+  .insight-section h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .insight-item { display: flex; gap: 12px; padding: 14px; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 8px; }
+  .insight-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+  .insight-text { font-size: 14px; line-height: 1.6; }
+  .insight-text strong { color: var(--text); }
+
+  /* Chart containers */
+  .chart-wrap { position: relative; height: 280px; }
+  .chart-wrap-tall { position: relative; height: 340px; }
+
+  /* Quote */
+  .quote { background: rgba(59,130,246,0.08); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 16px 0; font-size: 14px; line-height: 1.7; color: var(--text); font-style: italic; }
+  .quote-attr { font-size: 12px; color: var(--muted); margin-top: 8px; font-style: normal; }
+
+  /* Divider */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+  /* Section Title */
+  .section-title { font-size: 18px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .content { padding: 20px; }
+    .header { padding: 24px 20px; }
+    .nav { padding: 0 20px; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .header-meta { flex-wrap: wrap; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-tag">案例分析報告</div>
+  <h1>家庭財務危機 · 以房保家計畫</h1>
+  <p>基於完整對話記錄的深度分析 — 財務架構 · 風險評估 · 行動策略 · 個人洞察</p>
+  <div class="header-meta">
+    <div class="meta-item"><div class="meta-dot" style="background:#3b82f6"></div>房產價值 NT$1,200萬</div>
+    <div class="meta-item"><div class="meta-dot" style="background:#10b981"></div>規劃貸款 NT$1,000萬</div>
+    <div class="meta-item"><div class="meta-dot" style="background:#f59e0b"></div>月淨現金流 NT$5萬（9%配息 - 3%利息）</div>
+    <div class="meta-item"><div class="meta-dot" style="background:#8b5cf6"></div>本金1000萬永久保全・可傳承</div>
+  </div>
+</div>
+
+<div class="nav">
+  <button class="active" onclick="showTab('overview')">📋 案例概覽</button>
+  <button onclick="showTab('financial')">💰 財務分析</button>
+  <button onclick="showTab('risk')">⚠️ 風險評估</button>
+  <button onclick="showTab('strategy')">🎯 行動策略</button>
+  <button onclick="showTab('insight')">🧠 書豪個人洞察</button>
+</div>
+
+<div class="content">
+
+  <!-- ========== TAB 1: OVERVIEW ========== -->
+  <div id="tab-overview" class="tab-panel active">
+    <div class="section-title">家庭關係與角色</div>
+    <div class="people-grid">
+      <div class="person-card">
+        <!-- Dad avatar SVG: older man, stern -->
+        <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" style="width:52px;height:52px;margin-bottom:10px;">
+          <circle cx="28" cy="28" r="28" fill="rgba(239,68,68,0.12)"/>
+          <!-- Body -->
+          <ellipse cx="28" cy="46" rx="14" ry="10" fill="#7a3535"/>
+          <!-- Head -->
+          <circle cx="28" cy="22" r="12" fill="#c4845a"/>
+          <!-- Hair (gray/white, thinning) -->
+          <ellipse cx="28" cy="11" rx="12" ry="5" fill="#888" opacity="0.6"/>
+          <!-- Eyes (one slightly closed - weak eye) -->
+          <ellipse cx="23" cy="21" rx="2.5" ry="2" fill="#2a1a1a"/>
+          <ellipse cx="33" cy="21" rx="1.5" ry="1.2" fill="#2a1a1a" opacity="0.5"/>
+          <!-- Frown -->
+          <path d="M23,28 Q28,26 33,28" stroke="#7a4030" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <!-- Wrinkle lines -->
+          <line x1="20" y1="17" x2="18" y2="15" stroke="#a06040" stroke-width="1" opacity="0.5"/>
+          <line x1="36" y1="17" x2="38" y2="15" stroke="#a06040" stroke-width="1" opacity="0.5"/>
+        </svg>
+        <div class="person-name">爸爸</div>
+        <div class="person-role">房產所有人 · 問題核心</div>
+        <div class="person-tags">
+          <span class="tag tag-red">家暴前科</span>
+          <span class="tag tag-red">賭博習慣</span>
+          <span class="tag tag-yellow">單眼失明</span>
+          <span class="tag tag-yellow">急著脫產</span>
+        </div>
+      </div>
+      <div class="person-card">
+        <!-- Son avatar SVG: young man -->
+        <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" style="width:52px;height:52px;margin-bottom:10px;">
+          <circle cx="28" cy="28" r="28" fill="rgba(59,130,246,0.12)"/>
+          <ellipse cx="28" cy="46" rx="14" ry="10" fill="#2a4a7a"/>
+          <circle cx="28" cy="22" r="12" fill="#c49070"/>
+          <!-- Hair (dark, young) -->
+          <path d="M16,20 Q16,10 28,10 Q40,10 40,20" fill="#1a1a2a"/>
+          <!-- Eyes (alert, determined) -->
+          <circle cx="23" cy="22" r="2.5" fill="#1a1a2a"/>
+          <circle cx="33" cy="22" r="2.5" fill="#1a1a2a"/>
+          <circle cx="24" cy="21" r="1" fill="white" opacity="0.6"/>
+          <circle cx="34" cy="21" r="1" fill="white" opacity="0.6"/>
+          <!-- Slight concerned expression -->
+          <path d="M23,28 Q28,30 33,28" stroke="#7a5040" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="person-name">兒子</div>
+        <div class="person-role">計畫執行人 · 書豪的客戶</div>
+        <div class="person-tags">
+          <span class="tag tag-blue">想保住老家</span>
+          <span class="tag tag-green">與媽媽關係好</span>
+          <span class="tag tag-purple">潛在借款人</span>
+        </div>
+      </div>
+      <div class="person-card">
+        <!-- Mom avatar SVG: middle-aged woman -->
+        <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" style="width:52px;height:52px;margin-bottom:10px;">
+          <circle cx="28" cy="28" r="28" fill="rgba(16,185,129,0.12)"/>
+          <ellipse cx="28" cy="47" rx="14" ry="9" fill="#1a5a40"/>
+          <circle cx="28" cy="22" r="12" fill="#d4a080"/>
+          <!-- Hair (medium length) -->
+          <path d="M16,18 Q14,8 28,8 Q42,8 40,18 Q42,28 38,32 Q36,24 28,24 Q20,24 18,32 Q14,28 16,18Z" fill="#4a3020"/>
+          <!-- Eyes (gentle) -->
+          <ellipse cx="23" cy="22" rx="2.5" ry="2" fill="#1a1a2a"/>
+          <ellipse cx="33" cy="22" rx="2.5" ry="2" fill="#1a1a2a"/>
+          <circle cx="24" cy="21" r="1" fill="white" opacity="0.6"/>
+          <circle cx="34" cy="21" r="1" fill="white" opacity="0.6"/>
+          <!-- Gentle smile -->
+          <path d="M23,28 Q28,32 33,28" stroke="#8a5545" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="person-name">媽媽</div>
+        <div class="person-role">離婚訴訟方 · 潛在盟友</div>
+        <div class="person-tags">
+          <span class="tag tag-green">與兒子關係好</span>
+          <span class="tag tag-yellow">有財產分配權</span>
+          <span class="tag tag-blue">假扣押關鍵人</span>
+        </div>
+      </div>
+      <div class="person-card">
+        <!-- Shuhao avatar SVG: professional, suit -->
+        <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" style="width:52px;height:52px;margin-bottom:10px;">
+          <circle cx="28" cy="28" r="28" fill="rgba(245,158,11,0.12)"/>
+          <!-- Suit body -->
+          <ellipse cx="28" cy="47" rx="14" ry="9" fill="#1a2a4a"/>
+          <!-- Tie -->
+          <polygon points="28,35 26,44 28,46 30,44" fill="#d4a030"/>
+          <!-- Collar -->
+          <path d="M20,35 L26,35 L28,40 L30,35 L36,35" fill="#f5f0e8" opacity="0.9"/>
+          <!-- Head -->
+          <circle cx="28" cy="21" r="12" fill="#c4906a"/>
+          <!-- Hair (professional cut) -->
+          <path d="M17,19 Q17,9 28,9 Q39,9 39,19 Q39,14 28,13 Q17,14 17,19Z" fill="#1a1a14"/>
+          <!-- Eyes (confident) -->
+          <circle cx="23" cy="21" r="2.5" fill="#1a1a2a"/>
+          <circle cx="33" cy="21" r="2.5" fill="#1a1a2a"/>
+          <circle cx="24" cy="20" r="1" fill="white" opacity="0.7"/>
+          <circle cx="34" cy="20" r="1" fill="white" opacity="0.7"/>
+          <!-- Confident smile -->
+          <path d="M23,27 Q28,31 33,27" stroke="#8a5535" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="person-name">書豪</div>
+        <div class="person-role">保險業務 · 軍師角色</div>
+        <div class="person-tags">
+          <span class="tag tag-yellow">與兒子僅兩面之緣</span>
+          <span class="tag tag-purple">策略規劃能力強</span>
+          <span class="tag tag-blue">需建立信任</span>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">核心矛盾與局勢</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:rgba(239,68,68,0.15)">🔥</div>爸爸的算盤</div>
+        <ul class="outcome-list" style="margin-left: 0;">
+          <li>趁離婚判決前賣房，落袋為安</li>
+          <li>避免媽媽拿走一半財產</li>
+          <li>手上有現金，但極可能賭光</li>
+          <li>錢花光後仍需要人照顧</li>
+        </ul>
+        <div class="quote" style="margin-top: 16px;">一個有賭博習慣的人，手上突然有幾百萬，那不是救命錢，那是他人生最後一次大賭的籌碼。<div class="quote-attr">— Claude 分析</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="icon" style="background:rgba(59,130,246,0.15)">💡</div>書豪的計畫</div>
+        <ul class="outcome-list" style="margin-left: 0;">
+          <li>兒子當借款人，以房子抵押貸1000萬 @ 年利率3%（月息2.5萬）</li>
+          <li>1000萬放入年化9%月配息保單，每月產出7.5萬</li>
+          <li>7.5萬 − 2.5萬利息 = <strong style="color:var(--green)">每月淨5萬</strong>給爸爸</li>
+          <li><strong style="color:var(--accent)">本金1000萬不減少</strong>，20年後仍完整保存甚至增值</li>
+          <li>兒子握有1000萬資產，爸爸有固定現金流，房子也保住</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="stat">
+        <div class="stat-label">同時進行的訴訟線</div>
+        <div class="stat-value" style="color: var(--red)">3</div>
+        <div class="stat-sub">離婚 / 家暴刑事 / 財產查封</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">利差套利（年化）</div>
+        <div class="stat-value" style="color: var(--green)">+6%</div>
+        <div class="stat-sub">保單9%配息 − 貸款3%利息 = 淨6%現金流</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">行動緊迫程度</div>
+        <div class="stat-value" style="color: var(--yellow)">極高</div>
+        <div class="stat-sub">爸爸隨時可能找到買家</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== TAB 2: FINANCIAL ========== -->
+  <div id="tab-financial" class="tab-panel">
+    <div class="section-title">財務情境比較</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">💵 爸爸賣房 vs. 兒子貸款方案</div>
+        <div class="chart-wrap">
+          <canvas id="chartBar"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📅 長期現金流比較（20年）</div>
+        <div class="chart-wrap">
+          <canvas id="chartLine"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">🥧 每月現金流拆解（月配息7.5萬分配）</div>
+        <div class="chart-wrap">
+          <canvas id="chartPie"></canvas>
+        </div>
+        <div style="font-size:12px; color:var(--muted); margin-top:12px; line-height:1.7;">
+          💡 <strong style="color:var(--text)">關鍵邏輯：</strong>這不是「花掉1000萬」，而是用1000萬產生利差。本金永遠保留在兒子手上，配息才是真正在流動的部分。20年後兒子仍持有 ≈ NT$1,000萬資產。
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📊 賣房 vs 貸款方案 — 詳細對比</div>
+        <table class="risk-table">
+          <thead>
+            <tr>
+              <th>項目</th>
+              <th>爸爸賣房</th>
+              <th>兒子貸款方案</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>爸爸即時拿到現金</td>
+              <td style="color: var(--green)">NT$1,200萬（一次）</td>
+              <td style="color: var(--yellow)">NT$5萬/月（永久現金流）</td>
+            </tr>
+            <tr>
+              <td>保單月配息收入</td>
+              <td style="color: var(--muted)">—</td>
+              <td style="color: var(--green)">+NT$7.5萬（年化9%）</td>
+            </tr>
+            <tr>
+              <td>貸款月利息支出</td>
+              <td style="color: var(--muted)">—</td>
+              <td style="color: var(--red)">−NT$2.5萬（年化3%）</td>
+            </tr>
+            <tr>
+              <td>20年後本金狀況</td>
+              <td style="color: var(--red)">約NT$0（賭光）</td>
+              <td style="color: var(--green)">≈ NT$1,000萬（完整保留）</td>
+            </tr>
+            <tr>
+              <td>爸爸賭博風險</td>
+              <td><span class="risk-badge risk-high">極高（一次給清）</span></td>
+              <td><span class="risk-badge risk-low">隔離（每月限額）</span></td>
+            </tr>
+            <tr>
+              <td>媽媽可追討金額</td>
+              <td style="color: var(--red)">NT$600萬</td>
+              <td style="color: var(--green)">NT$0（已進保單）</td>
+            </tr>
+            <tr>
+              <td>爸爸20年後生活保障</td>
+              <td><span class="risk-badge risk-high">幾乎沒有</span></td>
+              <td><span class="risk-badge" style="background:rgba(16,185,129,0.15);color:#6ee7b7;">永久穩定</span></td>
+            </tr>
+            <tr>
+              <td>兒子20年後資產</td>
+              <td style="color: var(--red)">NT$0 + 被迫養父</td>
+              <td style="color: var(--green)">持有 ≈ NT$1,000萬</td>
+            </tr>
+            <tr>
+              <td>老家是否保住</td>
+              <td style="color: var(--red)">❌ 賣掉</td>
+              <td style="color: var(--green)">✅ 保住</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== TAB 3: RISK ========== -->
+  <div id="tab-risk" class="tab-panel">
+    <div class="section-title">風險矩陣分析</div>
+    <div class="card">
+      <div class="chart-wrap-tall">
+        <canvas id="chartRisk"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔍 逐項風險說明</div>
+      <table class="risk-table">
+        <thead>
+          <tr>
+            <th>風險項目</th>
+            <th>等級</th>
+            <th>說明</th>
+            <th>對策</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>爸爸拒絕計畫 / 找到買家</td>
+            <td><span class="risk-badge risk-high">高</span></td>
+            <td>爸爸可能假裝點頭，背地找買家快速成交</td>
+            <td>時間緊，本週內要行動。手上準備假扣押作為備案</td>
+          </tr>
+          <tr>
+            <td>假扣押與貸款衝突</td>
+            <td><span class="risk-badge risk-high">高</span></td>
+            <td>假扣押後銀行不會放貸，兩件事不能同時做</td>
+            <td>先談判，談不攏再打假扣押。兩張牌不能同時出</td>
+          </tr>
+          <tr>
+            <td>月配息商品本金安全性</td>
+            <td><span class="risk-badge risk-mid">中</span></td>
+            <td>若為投資型商品，本金可能縮水，配息可能中斷</td>
+            <td>優先選擇本金保證型商品，即使報酬率略低</td>
+          </tr>
+          <tr>
+            <td>兒子自身出事</td>
+            <td><span class="risk-badge risk-mid">中</span></td>
+            <td>兒子是借款人＋要保人＋被保險人，若身故整個架構崩潰</td>
+            <td>兒子必須另外準備壽險，金額覆蓋1000萬貸款</td>
+          </tr>
+          <tr>
+            <td>爸爸長照費用不足</td>
+            <td><span class="risk-badge risk-mid">中</span></td>
+            <td>爸爸眼睛幾乎看不到，5萬/月不夠支付看護費用</td>
+            <td>考慮用部分配息幫爸爸投保失能險 / 長照險</td>
+          </tr>
+          <tr>
+            <td>家庭訴訟纏身兒子</td>
+            <td><span class="risk-badge risk-mid">中</span></td>
+            <td>若貸款在假扣押前，家人可能指控兒子協助爸爸轉移資產</td>
+            <td>計畫執行需在法律灰色地帶小心操作，建議咨詢律師確認</td>
+          </tr>
+          <tr>
+            <td>爸爸鬧事要更多錢</td>
+            <td><span class="risk-badge risk-low">低-中</span></td>
+            <td>每月5萬對賭徒而言不夠，爸爸可能施壓要求提高</td>
+            <td>當初簽約時明確約定金額與條件，不輕易變動</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ========== TAB 4: STRATEGY ========== -->
+  <div id="tab-strategy" class="tab-panel">
+    <div class="section-title">三大情境 — 最終結果預測</div>
+    <div class="scenario-card">
+      <div class="scenario-header">
+        <div class="scenario-title">情境一：直接跟爸爸談，不用假扣押</div>
+        <span class="scenario-verdict verdict-ok">風險中等</span>
+      </div>
+      <ul class="outcome-list">
+        <li>若爸爸真心點頭 → 計畫順利執行，最理想結果</li>
+        <li>若爸爸假裝點頭、背地找買家 → 等兒子發現已太晚，房子已賣</li>
+        <li>爸爸是賭徒，擅長拖延與欺騙，純談判風險高</li>
+        <li>兒子完全沒有籌碼，談判地位弱</li>
+      </ul>
+    </div>
+    <div class="scenario-card">
+      <div class="scenario-header">
+        <div class="scenario-title">情境二：媽媽先假扣押，再談判</div>
+        <span class="scenario-verdict verdict-bad">風險高</span>
+      </div>
+      <ul class="outcome-list">
+        <li>房子被鎖住，爸爸被迫坐下來談 → 談判籌碼強</li>
+        <li>假扣押後貸款計畫直接死亡，銀行不放貸</li>
+        <li>家庭關係更撕裂，爸爸會記恨兒子</li>
+        <li>媽媽的財產分配目標達成，但兒子的計畫無法執行</li>
+      </ul>
+    </div>
+    <div class="scenario-card">
+      <div class="scenario-header">
+        <div class="scenario-title">情境三：先確認貸款可行性，同時媽媽備好假扣押文件但不送出（推薦）</div>
+        <span class="scenario-verdict verdict-best">最佳策略</span>
+      </div>
+      <ul class="outcome-list">
+        <li>兒子先去銀行確認貸款條件，評估可行性</li>
+        <li>媽媽在後台備妥假扣押文件，隨時可出</li>
+        <li>兒子帶著數字去跟爸爸談，讓爸爸知道假扣押牌存在但還沒打出</li>
+        <li>爸爸感受到壓力但還有退路，最容易點頭</li>
+        <li>談成 → 執行貸款保單；談不成 → 媽媽立刻送出假扣押</li>
+      </ul>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">行動時間軸</div>
+    <div class="card">
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-dot blue"></div>
+          <div class="tl-step">本週內（第1-3天）</div>
+          <div class="tl-title">書豪與兒子單獨會面</div>
+          <div class="tl-desc">不談方案，只問「你現在最擔心的是什麼？」讓他說，你聽。讓他感受到你是來陪他的，不是賣他東西。</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot purple"></div>
+          <div class="tl-step">第3-5天</div>
+          <div class="tl-title">準備數字對比表 ＋ 銀行詢問</div>
+          <div class="tl-desc">製作一張A4清楚對比「賣房vs不賣」的長期數字。陪兒子去銀行詢問貸款條件（不是你去，是陪他去）。</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot yellow"></div>
+          <div class="tl-step">第5-7天</div>
+          <div class="tl-title">媽媽在後台備妥假扣押文件</div>
+          <div class="tl-desc">書豪協助兒子與媽媽溝通，讓媽媽準備好但先不送出。這是談判底牌。</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot green"></div>
+          <div class="tl-step">第7-14天</div>
+          <div class="tl-title">兒子開口對爸爸說「那段話」</div>
+          <div class="tl-desc">兒子主講，書豪在旁支援。用人性角度切入，不是邏輯壓制，是讓爸爸感覺被兒子看見。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🗣️ 各方說詞參考</div>
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">兒子對爸爸說</div>
+        <div class="quote">爸，我知道我們之間發生過很多事，我也知道你不好過。我不是來跟你搶什麼的。我很怕你把錢拿到手之後，一個人扛著所有壓力，最後把自己搞垮。我有一個方法，讓你每個月穩穩有錢花，不用看任何人臉色，房子還在，你還是住在自己的家。我不是要控制你，我是不想有一天接到電話說你出事了，但我什麼都沒做過。</div>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">書豪對兒子說</div>
+        <div class="quote">你現在不是在保一間房子，你是在保你媽媽的未來跟你自己不被拖垮。這個計畫你要主導，但你不能讓爸爸感覺到你在對付他，你要讓他覺得你是在幫他。</div>
+      </div>
+      <div>
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">書豪對媽媽說</div>
+        <div class="quote">媽，你現在先不要急著動，不要讓爸爸知道你在準備什麼。你只要讓我去跟爸爸談，談成了你每個月有生活保障，談不成我們再走法律途徑。給我一點時間。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== TAB 5: INSIGHT ========== -->
+  <div id="tab-insight" class="tab-panel">
+    <div class="section-title">書豪的個人洞察分析</div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">💪 核心優勢</div>
+        <div class="chart-wrap">
+          <canvas id="chartRadar"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚠️ 盲點雷達</div>
+        <div class="chart-wrap">
+          <canvas id="chartBlind"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="insight-section">
+      <h3>✅ 你的優勢</h3>
+      <div class="insight-item">
+        <div class="insight-icon">🧠</div>
+        <div class="insight-text"><strong>立體思維</strong>：你不只看錢，你看人、看關係、看時間軸、看每個人背後的動機。這在保險業很少見，大部分業務只會賣商品，你在解決人的問題。</div>
+      </div>
+      <div class="insight-item">
+        <div class="insight-icon">⚡</div>
+        <div class="insight-text"><strong>強烈直覺</strong>：這整個貸款保單架構是你自己想出來的，不是教科書上的，代表你的腦袋在真實運轉，不是背話術。</div>
+      </div>
+      <div class="insight-item">
+        <div class="insight-icon">🎯</div>
+        <div class="insight-text"><strong>高標準要求</strong>：你一直在push要更深的答案，不接受表面的東西。這代表你對品質有要求，是真正的專業人士特質。</div>
+      </div>
+    </div>
+
+    <div class="insight-section">
+      <h3>⚠️ 你的盲點</h3>
+      <div class="insight-item">
+        <div class="insight-icon">⏩</div>
+        <div class="insight-text"><strong>跳太快</strong>：你腦袋裡已經到第五步了，但對方還在第一步。你會覺得對方跟不上，然後不耐煩。對初識的人來說，這是壓力，不是幫助。</div>
+      </div>
+      <div class="insight-item">
+        <div class="insight-icon">❓</div>
+        <div class="insight-text"><strong>難以接受不確定</strong>：你一直想要一個確定的答案和行動方案。但現實是有些事情就是要等、要觀察，你的個性不太擅長「等待」這個部分。</div>
+      </div>
+      <div class="insight-item">
+        <div class="insight-icon">🔢</div>
+        <div class="insight-text"><strong>邏輯壓過人性</strong>：分析案子時常常從架構先出發，後來才補人性的部分進去。客戶感受到的是「這個人很厲害」，但不一定是「這個人懂我」。</div>
+      </div>
+      <div class="insight-item">
+        <div class="insight-icon">🔑</div>
+        <div class="insight-text"><strong>高估專業，忽略信任</strong>：只有兩面之緣，要成交這張單，最大的障礙不是方案對不對，是兒子信不信任你這個人。</div>
+      </div>
+    </div>
+
+    <div class="insight-section">
+      <h3>🌱 成長練習</h3>
+      <div class="insight-item">
+        <div class="insight-icon">🤫</div>
+        <div class="insight-text"><strong>前10分鐘不說方案</strong>：下次見任何客戶，前十分鐘什麼方案都不要說。就問一個問題，然後聽。不要補充，不要接話，不要給建議。就聽完。</div>
+      </div>
+      <div class="insight-item">
+        <div class="insight-icon">👁️</div>
+        <div class="insight-text"><strong>讓對方感覺被看見</strong>：當客戶說他的狀況，不要馬上說「我有一個方法」。先說：「這個情況換我我也很難，你一個人扛著這些，很不容易。」就這一句，信任就開始了。</div>
+      </div>
+      <div class="insight-item">
+        <div class="insight-icon">🙌</div>
+        <div class="insight-text"><strong>承認自己的限制</strong>：你可以直接說「我知道我們認識不久，你不一定信任我，這很正常。我不是要你馬上做決定，我只是想讓你知道我在這裡。」這句話比任何專業分析都有力量。</div>
+      </div>
+    </div>
+
+    <div class="quote" style="font-size: 15px; line-height: 1.8;">
+      書豪，你最缺的不是專業，是讓人感覺安全的那種溫度。信任不是用能力證明的，是讓對方感覺到「你看見我」，不只是看見問題。你今天願意承認這件事，就已經是開始了。
+      <div class="quote-attr" style="margin-top: 10px;">— 對話記錄中最關鍵的洞察</div>
+    </div>
+  </div>
+
+</div><!-- end content -->
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+const CHART_DEFAULTS = {
+  color: '#94a3b8',
+  font: { family: "-apple-system, 'PingFang TC', sans-serif", size: 12 }
+};
+Chart.defaults.color = CHART_DEFAULTS.color;
+Chart.defaults.font = CHART_DEFAULTS.font;
+
+// Bar Chart — 月現金流比較
+new Chart(document.getElementById('chartBar'), {
+  type: 'bar',
+  data: {
+    labels: ['保單月配息收入', '貸款月利息支出', '爸爸淨月現金流', '兒子手握資產（百萬）'],
+    datasets: [{
+      label: '貸款方案數字（萬）',
+      data: [7.5, -2.5, 5, 1000],
+      backgroundColor: [
+        'rgba(16,185,129,0.7)',
+        'rgba(239,68,68,0.6)',
+        'rgba(59,130,246,0.7)',
+        'rgba(139,92,246,0.5)'
+      ],
+      borderColor: ['#10b981','#ef4444','#3b82f6','#8b5cf6'],
+      borderWidth: 1,
+      borderRadius: 6
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false },
+      tooltip: { callbacks: { label: ctx => {
+        if (ctx.dataIndex === 3) return '兒子資產: NT$1,000萬（永久保留）';
+        return ctx.dataset.label + ': NT$' + ctx.parsed.y + '萬/月';
+      }}}
+    },
+    scales: {
+      x: { grid: { color: 'rgba(255,255,255,0.05)' } },
+      y: { grid: { color: 'rgba(255,255,255,0.05)' },
+        ticks: { callback: v => v > 100 ? v + '萬(本金)' : v + '萬' } }
+    }
+  }
+});
+
+// Line Chart — 20年後資產對比
+const years = Array.from({length: 21}, (_, i) => i + '年');
+// 賣房：1200萬，每月花7萬（含賭博），快速歸零
+const sellPath = years.map((_, i) => Math.max(1200 - i * 84, 0));
+// 貸款方案：兒子手上1000萬本金保留，同時爸爸累計收到的現金
+const principalPath = years.map(() => 1000); // 本金不動
+const dadCumPath = years.map((_, i) => i * 60); // 爸爸每年收60萬（5萬x12）
+new Chart(document.getElementById('chartLine'), {
+  type: 'line',
+  data: {
+    labels: years,
+    datasets: [{
+      label: '賣房：爸爸剩餘現金（萬）',
+      data: sellPath,
+      borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)',
+      tension: 0.3, fill: true, pointRadius: 2, borderWidth: 2
+    }, {
+      label: '貸款方案：兒子保本資產（萬）',
+      data: principalPath,
+      borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.08)',
+      tension: 0, fill: false, pointRadius: 2, borderWidth: 2, borderDash: [6,3]
+    }, {
+      label: '貸款方案：爸爸累計收到（萬）',
+      data: dadCumPath,
+      borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)',
+      tension: 0.3, fill: true, pointRadius: 2, borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      x: { grid: { color: 'rgba(255,255,255,0.05)' } },
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { callback: v => v + '萬' } }
+    }
+  }
+});
+
+// Pie Chart — 月現金流拆解
+new Chart(document.getElementById('chartPie'), {
+  type: 'doughnut',
+  data: {
+    labels: ['爸爸月生活費（5萬）', '貸款月利息成本（2.5萬）'],
+    datasets: [{
+      data: [5, 2.5],
+      backgroundColor: ['rgba(16,185,129,0.75)', 'rgba(239,68,68,0.6)'],
+      borderColor: ['#10b981', '#ef4444'],
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom' },
+      tooltip: { callbacks: { label: ctx => ctx.label + '（月配息7.5萬中的占比）' } }
+    },
+    cutout: '60%'
+  }
+});
+
+// Risk Scatter
+new Chart(document.getElementById('chartRisk'), {
+  type: 'bubble',
+  data: {
+    datasets: [{
+      label: '風險項目',
+      data: [
+        { x: 8, y: 8, r: 18, label: '爸爸拒絕計畫' },
+        { x: 9, y: 7, r: 16, label: '假扣押衝突' },
+        { x: 6, y: 6, r: 12, label: '月配息風險' },
+        { x: 5, y: 8, r: 13, label: '兒子出事' },
+        { x: 4, y: 5, r: 10, label: '長照費用' },
+        { x: 6, y: 4, r: 9, label: '家庭訴訟' },
+        { x: 3, y: 3, r: 7, label: '爸爸要更多錢' },
+      ],
+      backgroundColor: ctx => {
+        const v = ctx.raw.x + ctx.raw.y;
+        if (v >= 15) return 'rgba(239,68,68,0.6)';
+        if (v >= 11) return 'rgba(245,158,11,0.6)';
+        return 'rgba(16,185,129,0.6)';
+      },
+      borderColor: ctx => {
+        const v = ctx.raw.x + ctx.raw.y;
+        if (v >= 15) return '#ef4444';
+        if (v >= 11) return '#f59e0b';
+        return '#10b981';
+      },
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.raw.label + ` (發生率: ${ctx.raw.x}/10, 影響: ${ctx.raw.y}/10)`
+        }
+      }
+    },
+    scales: {
+      x: { title: { display: true, text: '發生可能性 (1-10)' }, min: 0, max: 10, grid: { color: 'rgba(255,255,255,0.05)' } },
+      y: { title: { display: true, text: '影響程度 (1-10)' }, min: 0, max: 10, grid: { color: 'rgba(255,255,255,0.05)' } }
+    }
+  }
+});
+
+// Radar - Strengths
+new Chart(document.getElementById('chartRadar'), {
+  type: 'radar',
+  data: {
+    labels: ['策略思維', '問題洞察', '人性理解', '數字能力', '創新方案', '執行力'],
+    datasets: [{
+      label: '書豪能力評估',
+      data: [9, 8, 7, 8, 9, 7],
+      backgroundColor: 'rgba(59,130,246,0.2)',
+      borderColor: '#3b82f6',
+      borderWidth: 2,
+      pointBackgroundColor: '#3b82f6'
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      r: {
+        min: 0, max: 10,
+        grid: { color: 'rgba(255,255,255,0.1)' },
+        pointLabels: { font: { size: 12 } },
+        ticks: { display: false }
+      }
+    }
+  }
+});
+
+// Radar - Blind spots
+new Chart(document.getElementById('chartBlind'), {
+  type: 'radar',
+  data: {
+    labels: ['急著回應', '跳太快', '邏輯>人性', '信任建立', '接受不確定', '放慢節奏'],
+    datasets: [{
+      label: '改善空間（越高越需要改善）',
+      data: [9, 8, 7, 8, 7, 9],
+      backgroundColor: 'rgba(245,158,11,0.2)',
+      borderColor: '#f59e0b',
+      borderWidth: 2,
+      pointBackgroundColor: '#f59e0b'
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      r: {
+        min: 0, max: 10,
+        grid: { color: 'rgba(255,255,255,0.1)' },
+        pointLabels: { font: { size: 12 } },
+        ticks: { display: false }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
