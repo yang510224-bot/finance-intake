@@ -1,12 +1,18 @@
 // api/submit.js  — Vercel Serverless Function (Node.js)
 // POST /api/submit
-// 1. Saves form data to Supabase
-// 2. Calls Claude API to generate report
-// 3. Updates row with report_html + report_ready=true
-// 4. Returns { id }
+//
+// Flow:
+//   1. Insert form data into Supabase → get id
+//   2. Return { id } to client IMMEDIATELY (so browser can redirect)
+//   3. waitUntil: generate Claude report in background, then update DB
+//
+// Why waitUntil: Claude takes 30–90s. Vercel functions timeout at 10s (Hobby)
+// or 60s (Pro) if we block the response. waitUntil keeps the lambda alive
+// after res.end() without blocking the HTTP response.
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
+import { waitUntil } from '@vercel/functions'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const supabase = createClient(
@@ -32,46 +38,54 @@ export default async function handler(req, res) {
 
   const body = req.body
 
-  // 1. Insert form data
+  // ── Step 1: Insert form data ──────────────────────────────────────────────
   const { data: row, error: insertErr } = await supabase
     .from('finance_intakes')
     .insert({
-      name:           body.name,
-      age:            Number(body.age) || null,
-      health:         body.health,
-      marital:        body.marital,
-      children:       Number(body.children) || 0,
-      dependents:     body.dependents,
-      occupation:     body.occupation,
-      income:         Number(body.income) || null,
-      income_type:    body.income_type,
-      monthly_expense: Number(body.monthly_expense) || null,
-      savings_rate:   Number(body.savings_rate) || null,
+      name:             body.name,
+      age:              Number(body.age) || null,
+      health:           body.health,
+      marital:          body.marital,
+      children:         Number(body.children) || 0,
+      dependents:       body.dependents,
+      occupation:       body.occupation,
+      income:           Number(body.income) || null,
+      income_type:      body.income_type,
+      monthly_expense:  Number(body.monthly_expense) || null,
+      savings_rate:     Number(body.savings_rate) || null,
       emergency_months: Number(body.emergency_months) || null,
-      has_mortgage:   !!body.has_mortgage,
-      mortgage_amt:   Number(body.mortgage_amt) || null,
-      other_debt:     Number(body.other_debt) || null,
-      debt_notes:     body.debt_notes,
-      has_life:       !!body.has_life,
-      has_health:     !!body.has_health,
-      has_accident:   !!body.has_accident,
-      insurance_gap:  body.insurance_gap,
-      report_ready:   false,
+      has_mortgage:     !!body.has_mortgage,
+      mortgage_amt:     Number(body.mortgage_amt) || null,
+      other_debt:       Number(body.other_debt) || null,
+      debt_notes:       body.debt_notes,
+      has_life:         !!body.has_life,
+      has_health:       !!body.has_health,
+      has_accident:     !!body.has_accident,
+      insurance_gap:    body.insurance_gap,
+      report_ready:     false,
     })
     .select('id')
     .single()
 
   if (insertErr) {
-    console.error('Insert error:', insertErr)
-    return res.status(500).json({ error: 'DB insert failed' })
+    console.error('[submit] Insert error:', insertErr)
+    return res.status(500).json({ error: 'DB insert failed', detail: insertErr.message })
   }
 
   const id = row.id
+  console.log('[submit] Row inserted, id =', id)
 
-  // 2. Generate report with Claude (streaming, collect full text)
+  // ── Step 2: Kick off Claude in background AFTER response is sent ──────────
+  waitUntil(generateReport(id, body))
+
+  // ── Step 3: Return id immediately so browser can redirect ────────────────
+  return res.status(200).json({ id })
+}
+
+// ── Background: generate report + update DB ────────────────────────────────
+async function generateReport(id, body) {
+  console.log('[generate] Starting Claude for id =', id)
   try {
-    const userMessage = buildUserMessage(body)
-
     const stream = await anthropic.messages.stream({
       model: 'claude-opus-4-6',
       max_tokens: 4096,
@@ -80,10 +94,10 @@ export default async function handler(req, res) {
         {
           type: 'text',
           text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },  // prompt caching
+          cache_control: { type: 'ephemeral' },
         },
       ],
-      messages: [{ role: 'user', content: userMessage }],
+      messages: [{ role: 'user', content: buildUserMessage(body) }],
     })
 
     const finalMsg = await stream.finalMessage()
@@ -92,19 +106,21 @@ export default async function handler(req, res) {
       .map(b => b.text)
       .join('')
 
-    // 3. Update row with report
     const { error: updateErr } = await supabase
       .from('finance_intakes')
       .update({ report_html: reportHtml, report_ready: true })
       .eq('id', id)
 
-    if (updateErr) console.error('Update error:', updateErr)
-  } catch (claudeErr) {
-    console.error('Claude error:', claudeErr)
-    // Still return id so user can see the blurred page
+    if (updateErr) {
+      console.error('[generate] Update error:', updateErr)
+    } else {
+      console.log('[generate] Report saved, id =', id)
+    }
+  } catch (err) {
+    console.error('[generate] Claude error for id =', id, err?.message)
+    // Mark as ready=false so report page keeps polling
+    // (or you could save an error placeholder)
   }
-
-  return res.status(200).json({ id })
 }
 
 function buildUserMessage(d) {
@@ -125,7 +141,7 @@ function buildUserMessage(d) {
 緊急備用金：${d.emergency_months || 0} 個月
 
 【負債結構】
-房貸：${d.has_mortgage ? `是（${Number(d.mortgage_amt || 0).toLocaleString()} 元）` : '無'}
+房貸：${d.has_mortgage ? `是（每月 ${Number(d.mortgage_amt || 0).toLocaleString()} 元）` : '無'}
 其他負債：${d.other_debt ? Number(d.other_debt).toLocaleString() + ' 元' : '無'}
 備註：${d.debt_notes || '無'}
 

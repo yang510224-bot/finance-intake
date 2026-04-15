@@ -2,15 +2,20 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import BlurMask from '../components/BlurMask'
 
+const POLL_INTERVAL = 3000   // 每 3 秒查一次
+const MAX_POLLS     = 40     // 最多等 2 分鐘（40 × 3s）
+
 export default function ReportPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [report, setReport] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [poll, setPoll] = useState(0)
+  const [report, setReport]     = useState(null)
+  const [loading, setLoading]   = useState(true)  // 第一次 fetch 前
+  const [pollCount, setPollCount] = useState(0)
+  const [timedOut, setTimedOut] = useState(false)
 
+  // ── Fetch report ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!id) return navigate('/')
+    if (!id) { navigate('/'); return }
 
     const fetchReport = async () => {
       try {
@@ -25,16 +30,18 @@ export default function ReportPage() {
     }
 
     fetchReport()
-  }, [id, poll])
+  }, [id, pollCount])
 
-  // Poll every 5s until report is ready (max 12 retries = 60s)
+  // ── Polling: keep refreshing until report_ready ───────────────────────────
   useEffect(() => {
-    if (report?.report_ready) return
-    if (poll >= 12) return
-    const timer = setTimeout(() => setPoll(p => p + 1), 5000)
-    return () => clearTimeout(timer)
-  }, [report, poll])
+    if (report?.report_ready) return         // done — stop polling
+    if (pollCount >= MAX_POLLS) { setTimedOut(true); return }
 
+    const timer = setTimeout(() => setPollCount(c => c + 1), POLL_INTERVAL)
+    return () => clearTimeout(timer)
+  }, [report, pollCount])
+
+  // ── Still doing first fetch ───────────────────────────────────────────────
   if (loading) {
     return (
       <div className="report-shell">
@@ -42,13 +49,14 @@ export default function ReportPage() {
           <div className="loading-shell">
             <div className="spinner" />
             <p className="loading-title">報告生成中…</p>
-            <p className="loading-sub">通常需要 20–40 秒，請稍候</p>
+            <p className="loading-sub">Howard 的 AI 助理正在分析你的財務狀況，通常需要 30–60 秒</p>
           </div>
         </div>
       </div>
     )
   }
 
+  // ── Row not found ─────────────────────────────────────────────────────────
   if (!report) {
     return (
       <div className="report-shell">
@@ -62,10 +70,10 @@ export default function ReportPage() {
     )
   }
 
-  const name = report.name || '你'
+  const name  = report.name || '你'
   const ready = report.report_ready
 
-  // Fallback placeholder while still generating
+  // ── Placeholder shown (blurred) while still generating ───────────────────
   const previewHtml = report.report_html || `
     <div class="report-section">
       <h2 class="report-title">財務健康評分</h2>
@@ -101,40 +109,59 @@ export default function ReportPage() {
   return (
     <div className="report-shell">
       <div className="report-card">
+
         <div className="brand" style={{ marginBottom: 24 }}>
           <div className="brand-title">財務整聊</div>
           <div className="brand-sub">HOWARD · FINANCIAL CONSULTING</div>
         </div>
 
-        <h1 style={{
-          fontFamily: "'Noto Serif TC', serif",
-          fontSize: '1.4rem',
-          color: '#2C3E30',
-          marginBottom: 6,
-        }}>
+        <h1 style={{ fontFamily: "'Noto Serif TC', serif", fontSize: '1.4rem', color: '#2C3E30', marginBottom: 6 }}>
           {name} 的財務診斷報告
         </h1>
-        <p style={{ fontSize: '0.82rem', color: '#aaa', marginBottom: 32 }}>
+        <p style={{ fontSize: '0.82rem', color: '#aaa', marginBottom: 4 }}>
           {new Date(report.created_at).toLocaleDateString('zh-TW')} 生成
-          {!ready && ' · 報告仍在生成中，頁面將自動更新…'}
         </p>
 
+        {/* Generating status bar */}
+        {!ready && !timedOut && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: '#fffbe8', border: '1px solid #fcd34d',
+            borderRadius: 8, padding: '10px 16px', marginBottom: 24,
+            fontSize: '0.85rem', color: '#92400e',
+          }}>
+            <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2, margin: 0, flexShrink: 0 }} />
+            AI 報告生成中，頁面每 3 秒自動更新（{MAX_POLLS - pollCount} 次剩餘）…
+          </div>
+        )}
+
+        {timedOut && !ready && (
+          <div style={{
+            background: '#fef2f2', border: '1px solid #f87171',
+            borderRadius: 8, padding: '12px 16px', marginBottom: 24,
+            fontSize: '0.85rem', color: '#b91c1c',
+          }}>
+            報告生成時間較長，請重新整理此頁面繼續等待，或
+            <button
+              style={{ background: 'none', border: 'none', color: '#b91c1c', textDecoration: 'underline', cursor: 'pointer', padding: '0 4px' }}
+              onClick={() => { setTimedOut(false); setPollCount(0) }}
+            >
+              點此重試
+            </button>
+            。
+          </div>
+        )}
+
         <BlurMask locked={!ready}>
-          <div
-            className="report-content"
-            dangerouslySetInnerHTML={{ __html: previewHtml }}
-          />
+          <div className="report-content" dangerouslySetInnerHTML={{ __html: previewHtml }} />
         </BlurMask>
 
         <div style={{ textAlign: 'center', marginTop: 40 }}>
-          <button
-            className="btn btn-back"
-            onClick={() => navigate('/')}
-            style={{ fontSize: '0.82rem' }}
-          >
+          <button className="btn btn-back" onClick={() => navigate('/')} style={{ fontSize: '0.82rem' }}>
             ← 重新填寫
           </button>
         </div>
+
       </div>
     </div>
   )
