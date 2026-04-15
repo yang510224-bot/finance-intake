@@ -86,22 +86,14 @@ export default async function handler(req, res) {
 async function generateReport(id, body) {
   console.log('[generate] Starting Claude for id =', id)
   try {
-    const stream = await anthropic.messages.stream({
+    const response = await anthropic.messages.create({
       model: 'claude-opus-4-6',
       max_tokens: 4096,
-      thinking: { type: 'adaptive' },
-      system: [
-        {
-          type: 'text',
-          text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
+      system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: buildUserMessage(body) }],
     })
 
-    const finalMsg = await stream.finalMessage()
-    const reportHtml = finalMsg.content
+    const reportHtml = response.content
       .filter(b => b.type === 'text')
       .map(b => b.text)
       .join('')
