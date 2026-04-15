@@ -1,203 +1,295 @@
-import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import BlurMask from '../components/BlurMask'
-
-const POLL_INTERVAL = 4000   // poll every 4s
-const MAX_POLLS     = 45     // up to 3 minutes
+import { useState } from 'react'
 
 export default function ReportPage() {
-  const { id } = useParams()
-  const navigate = useNavigate()
+  const [data] = useState(() => JSON.parse(sessionStorage.getItem('intake_data') || '{}'))
+  const [downloading, setDownloading] = useState(false)
 
-  const [report, setReport]       = useState(null)
-  const [firstLoad, setFirstLoad] = useState(true)   // spinner before first fetch
-  const [pollCount, setPollCount] = useState(0)
-  const [timedOut, setTimedOut]   = useState(false)
-  const [genError, setGenError]   = useState('')
-  const generateCalled = useRef(false)               // call /api/generate only once
+  const today = new Date().toLocaleDateString('zh-TW', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).replace(/\//g, '/')
 
-  // ── Fetch report from Supabase (via api/report) ───────────────────────────
-  useEffect(() => {
-    if (!id) { navigate('/'); return }
+  const age = data.birth_year ? new Date().getFullYear() - parseInt(data.birth_year) : '—'
 
-    fetch(`/api/report?id=${id}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        setReport(data)
-        setFirstLoad(false)
-      })
-      .catch(() => setFirstLoad(false))
-  }, [id, pollCount])
+  const handleDownload = async () => {
+    setDownloading(true)
+    const element = document.getElementById('pdf-template')
+    const html2pdf = (await import('html2pdf.js')).default
+    const opt = {
+      margin: 0,
+      filename: `財務整聊前置報告_${data.name || '用戶'}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    }
 
-  // ── Trigger Claude generation once when report is not yet ready ───────────
-  useEffect(() => {
-    if (!id || !report || report.report_ready || generateCalled.current) return
-    generateCalled.current = true
+    await html2pdf().set(opt).from(element).save()
 
-    console.log('[ReportPage] Triggering /api/generate for id =', id)
-    fetch('/api/generate', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ id }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          console.error('[ReportPage] generate error:', data.error, data.detail)
-          setGenError(data.detail || data.error)
-        } else {
-          // Force one more poll to pick up the finished report
-          setPollCount(c => c + 1)
-        }
-      })
-      .catch(err => {
-        console.error('[ReportPage] generate fetch failed:', err)
-        setGenError('連線失敗，請重新整理頁面')
-      })
-  }, [id, report])
+    try {
+      const blob = await html2pdf().set(opt).from(element).outputPdf('blob')
+      const { createClient } = await import('@supabase/supabase-js')
+      const sb = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY
+      )
+      await sb.storage.from('reports').upload(
+        `${data.id}/report.pdf`,
+        blob,
+        { contentType: 'application/pdf', upsert: true }
+      )
+    } catch (e) {
+      console.error('Storage upload failed:', e)
+    }
 
-  // ── Keep polling until report_ready ──────────────────────────────────────
-  useEffect(() => {
-    if (report?.report_ready) return
-    if (pollCount >= MAX_POLLS) { setTimedOut(true); return }
-    const t = setTimeout(() => setPollCount(c => c + 1), POLL_INTERVAL)
-    return () => clearTimeout(t)
-  }, [report, pollCount])
-
-  // ── First-load spinner ────────────────────────────────────────────────────
-  if (firstLoad) {
-    return (
-      <div className="report-shell">
-        <div className="card">
-          <div className="loading-shell">
-            <div className="spinner" />
-            <p className="loading-title">載入中…</p>
-          </div>
-        </div>
-      </div>
-    )
+    setDownloading(false)
   }
-
-  // ── Row not found ─────────────────────────────────────────────────────────
-  if (!report) {
-    return (
-      <div className="report-shell">
-        <div className="card" style={{ textAlign: 'center' }}>
-          <p style={{ color: '#dc2626' }}>找不到此報告，請確認連結是否正確。</p>
-          <button className="btn btn-back" style={{ marginTop: 20 }} onClick={() => navigate('/')}>
-            重新填寫
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  const name  = report.name || '你'
-  const ready = report.report_ready
-
-  const previewHtml = report.report_html || `
-    <div class="report-section">
-      <h2 class="report-title">財務健康評分</h2>
-      <div class="report-body">
-        <p>Howard 的 AI 助理正在分析你的財務狀況，通常需要 30–60 秒…</p>
-      </div>
-    </div>
-    <div class="report-section">
-      <h2 class="report-title">三大風險警報</h2>
-      <div class="report-body">
-        <p class="highlight-red">⚠️ 風險一：緊急備用金不足</p>
-        <p class="highlight-red">⚠️ 風險二：保障缺口過大</p>
-        <p class="highlight-red">⚠️ 風險三：現金流高度依賴單一收入</p>
-      </div>
-    </div>
-    <div class="report-section">
-      <h2 class="report-title">三項立即行動建議</h2>
-      <div class="report-body">
-        <p class="highlight-gold">✅ 行動一：建立 3–6 個月緊急備用金帳戶</p>
-        <p class="highlight-gold">✅ 行動二：盤點現有保險保額是否覆蓋家庭支出</p>
-        <p class="highlight-gold">✅ 行動三：與 Howard 進行一對一整聊，制定防禦架構</p>
-      </div>
-    </div>
-    <div class="cta-block">
-      <p>完整的防禦架構需要根據你的實際狀況量身規劃。</p>
-      <a href="https://line.me/R/ti/p/%40fia8315s" target="_blank" rel="noopener noreferrer">
-        ☕ 預約 Howard 一對一財務整聊 →
-      </a>
-    </div>
-  `
 
   return (
-    <div className="report-shell">
-      <div className="report-card">
-
-        <div className="brand" style={{ marginBottom: 24 }}>
-          <div className="brand-title">財務整聊</div>
-          <div className="brand-sub">HOWARD · FINANCIAL CONSULTING</div>
-        </div>
-
-        <h1 style={{ fontFamily: "'Noto Serif TC', serif", fontSize: '1.4rem', color: '#2C3E30', marginBottom: 6 }}>
-          {name} 的財務診斷報告
-        </h1>
-        <p style={{ fontSize: '0.82rem', color: '#aaa', marginBottom: 16 }}>
-          {new Date(report.created_at).toLocaleDateString('zh-TW')} 生成
-        </p>
-
-        {/* Status bar: generating */}
-        {!ready && !timedOut && !genError && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            background: '#fffbe8', border: '1px solid #fcd34d',
-            borderRadius: 8, padding: '10px 16px', marginBottom: 24,
-            fontSize: '0.85rem', color: '#92400e',
-          }}>
-            <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2, margin: 0, flexShrink: 0 }} />
-            AI 報告生成中，頁面每 4 秒自動更新…
-          </div>
-        )}
-
-        {/* Error from generate */}
-        {genError && (
-          <div style={{
-            background: '#fef2f2', border: '1px solid #f87171',
-            borderRadius: 8, padding: '12px 16px', marginBottom: 24,
-            fontSize: '0.85rem', color: '#b91c1c',
-          }}>
-            ⚠️ 報告生成失敗：{genError}。請重新整理頁面重試，或
-            <a href="https://line.me/R/ti/p/%40fia8315s" target="_blank" rel="noopener noreferrer"
-               style={{ color: '#b91c1c', marginLeft: 4 }}>
-              直接聯絡 Howard →
-            </a>
-          </div>
-        )}
-
-        {/* Timed out */}
-        {timedOut && !ready && !genError && (
-          <div style={{
-            background: '#fef2f2', border: '1px solid #f87171',
-            borderRadius: 8, padding: '12px 16px', marginBottom: 24,
-            fontSize: '0.85rem', color: '#b91c1c',
-          }}>
-            報告生成時間較長，請
-            <button style={{ background: 'none', border: 'none', color: '#b91c1c',
-              textDecoration: 'underline', cursor: 'pointer', padding: '0 4px' }}
-              onClick={() => { setTimedOut(false); setPollCount(0) }}>
-              點此重新整理
-            </button>
-            繼續等待。
-          </div>
-        )}
-
-        <BlurMask locked={!ready}>
-          <div className="report-content" dangerouslySetInnerHTML={{ __html: previewHtml }} />
-        </BlurMask>
-
-        <div style={{ textAlign: 'center', marginTop: 40 }}>
-          <button className="btn btn-back" onClick={() => navigate('/')} style={{ fontSize: '0.82rem' }}>
-            ← 重新填寫
+    <>
+      {/* Visible report page */}
+      <div className="report-screen">
+        <div className="report-card">
+          <div className="report-icon">🙏</div>
+          <h1 className="report-title">Howard 已收到您的資料</h1>
+          <p className="report-body">
+            感謝您完成這份前置準備。根據您填寫的內容，Howard 將在 24 小時內主動與您聯繫，安排一對一的財務整聊通話。在通話中，我們會一起討論您的財務目標，並為您規劃最適合的方向。
+          </p>
+          <button
+            className="btn-download"
+            onClick={handleDownload}
+            disabled={downloading}
+          >
+            {downloading ? '產生中…' : '⬇ 下載我的前置報告 PDF'}
           </button>
+          <a
+            href="https://lin.ee/6PIRaEp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-line"
+          >
+            加入 Howard 的 LINE@ 保持聯繫
+          </a>
+        </div>
+      </div>
+
+      {/* Hidden PDF template */}
+      <div
+        className="pdf-template"
+        id="pdf-template"
+        style={{
+          position: 'fixed',
+          left: '-9999px',
+          top: 0,
+          width: '210mm',
+          background: '#fff',
+          color: '#1a1a1a',
+          fontFamily: 'Arial, "Microsoft JhengHei", sans-serif',
+          padding: '20mm',
+          boxSizing: 'border-box',
+          fontSize: '13px',
+          lineHeight: 1.8,
+        }}
+      >
+        {/* PDF Header */}
+        <div style={{
+          borderBottom: '3px solid #D4AF37',
+          paddingBottom: '12px',
+          marginBottom: '20px',
+        }}>
+          <div style={{ fontSize: '20px', fontWeight: 700, color: '#2C3E30', marginBottom: '4px' }}>
+            財務整聊｜前置準備報告
+          </div>
+          <div style={{ fontSize: '14px', color: '#555' }}>
+            Howard 豪歐 × {data.name || '—'}
+          </div>
+          <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+            生成日期：{today}
+          </div>
         </div>
 
+        {/* 基本資料 */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{
+            fontSize: '14px', fontWeight: 700,
+            color: '#2C3E30', borderLeft: '4px solid #D4AF37',
+            paddingLeft: '10px', marginBottom: '8px',
+          }}>
+            【基本資料】
+          </div>
+          <div style={{ paddingLeft: '14px' }}>
+            <div>姓名：{data.name || '—'}</div>
+            <div>生日：{data.birthday || '—'}（{age} 歲）</div>
+            <div>地區：{data.city || '—'}</div>
+            <div>職業：{data.occupation || '—'}</div>
+            <div>月收入：{data.income_range || '—'}</div>
+          </div>
+        </div>
+
+        {/* 財務目標 */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{
+            fontSize: '14px', fontWeight: 700,
+            color: '#2C3E30', borderLeft: '4px solid #D4AF37',
+            paddingLeft: '10px', marginBottom: '8px',
+          }}>
+            【財務目標】
+          </div>
+          <div style={{ paddingLeft: '14px' }}>
+            <div>最想解決的問題：{data.primary_goal || '—'}</div>
+            <div>希望退休年齡：{data.retirement_age ? `${data.retirement_age} 歲` : '—'}</div>
+            <div>退休後每月生活費：{data.retirement_monthly || '—'}</div>
+          </div>
+        </div>
+
+        {/* 理財金三角 */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{
+            fontSize: '14px', fontWeight: 700,
+            color: '#2C3E30', borderLeft: '4px solid #D4AF37',
+            paddingLeft: '10px', marginBottom: '8px',
+          }}>
+            【收入分配（理財金三角）】
+          </div>
+          <div style={{ paddingLeft: '14px' }}>
+            <div>生活支出：{data.expense_pct ?? '—'}%</div>
+            <div>理財規劃：{data.investment_pct ?? '—'}%</div>
+            <div>風險規劃：{data.protection_pct ?? '—'}%</div>
+          </div>
+        </div>
+
+        {/* 資產狀況 */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{
+            fontSize: '14px', fontWeight: 700,
+            color: '#2C3E30', borderLeft: '4px solid #D4AF37',
+            paddingLeft: '10px', marginBottom: '8px',
+          }}>
+            【資產狀況】
+          </div>
+          <div style={{ paddingLeft: '14px' }}>
+            {!data.has_property || !data.properties || data.properties.length === 0 ? (
+              <div>房產：無</div>
+            ) : (
+              data.properties.map((prop, idx) => (
+                <div key={idx} style={{ marginBottom: '6px' }}>
+                  <div style={{ fontWeight: 600 }}>房產 {idx + 1}：{prop.city || '—'}</div>
+                  <div style={{ paddingLeft: '12px' }}>
+                    <div>市值：{prop.value ? `${prop.value} 萬元` : '—'}</div>
+                    <div>
+                      貸款：{prop.has_loan
+                        ? `有，餘額 ${prop.loan_balance || '—'} 萬元，每月 ${prop.monthly_payment || '—'} 元`
+                        : '無'}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 負債狀況 */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{
+            fontSize: '14px', fontWeight: 700,
+            color: '#2C3E30', borderLeft: '4px solid #D4AF37',
+            paddingLeft: '10px', marginBottom: '8px',
+          }}>
+            【負債狀況】
+          </div>
+          <div style={{ paddingLeft: '14px' }}>
+            {data.debt_types && data.debt_types.includes('無負債') ? (
+              <div>無負債</div>
+            ) : data.debt_types && data.debt_types.length > 0 ? (
+              <>
+                <div>負債類型：{data.debt_types.join('、')}</div>
+                <div>總負債金額：{data.total_debt ? `${data.total_debt} 萬元` : '—'}</div>
+                <div>每月總還款：{data.monthly_debt ? `${data.monthly_debt} 元` : '—'}</div>
+              </>
+            ) : (
+              <div>未填寫</div>
+            )}
+          </div>
+        </div>
+
+        {/* 保險配置 */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{
+            fontSize: '14px', fontWeight: 700,
+            color: '#2C3E30', borderLeft: '4px solid #D4AF37',
+            paddingLeft: '10px', marginBottom: '8px',
+          }}>
+            【保險配置】
+          </div>
+          <div style={{ paddingLeft: '14px' }}>
+            <div>
+              壽險：{data.has_life
+                ? `有，保額 ${data.life_coverage ? `${data.life_coverage} 萬元` : '未填'}`
+                : '無'}
+            </div>
+            <div>
+              醫療險：{data.has_medical
+                ? `有，每日住院給付 ${data.medical_daily ? `${data.medical_daily} 元` : '未填'}`
+                : '無'}
+            </div>
+            <div>
+              意外險：{data.has_accident
+                ? `有，保額 ${data.accident_coverage ? `${data.accident_coverage} 萬元` : '未填'}`
+                : '無'}
+            </div>
+            <div>
+              重大傷病／癌症險：{data.has_critical
+                ? `有，保額 ${data.critical_coverage ? `${data.critical_coverage} 萬元` : '未填'}`
+                : '無'}
+            </div>
+            <div>每月總保費：{data.monthly_premium ? `${data.monthly_premium} 元` : '—'}</div>
+          </div>
+        </div>
+
+        {/* 投資風險偏好 */}
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{
+            fontSize: '14px', fontWeight: 700,
+            color: '#2C3E30', borderLeft: '4px solid #D4AF37',
+            paddingLeft: '10px', marginBottom: '8px',
+          }}>
+            【投資風險偏好】
+          </div>
+          <div style={{ paddingLeft: '14px' }}>
+            <div>{data.risk_attitude || '—'}</div>
+          </div>
+        </div>
+
+        {/* 聯絡資料 */}
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{
+            fontSize: '14px', fontWeight: 700,
+            color: '#2C3E30', borderLeft: '4px solid #D4AF37',
+            paddingLeft: '10px', marginBottom: '8px',
+          }}>
+            【聯絡資料】
+          </div>
+          <div style={{ paddingLeft: '14px' }}>
+            <div>姓名：{data.contact_name || data.name || '—'}</div>
+            <div>電話：{data.phone || '—'}</div>
+            <div>LINE ID：{data.line_id || '（未填）'}</div>
+          </div>
+        </div>
+
+        {/* PDF Footer */}
+        <div style={{
+          borderTop: '2px solid #D4AF37',
+          paddingTop: '14px',
+          marginTop: '10px',
+          fontSize: '12px',
+          color: '#444',
+          textAlign: 'center',
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+            下一步：Howard 將於 24 小時內主動聯繫您安排通話
+          </div>
+          <div>LINE@：https://lin.ee/6PIRaEp</div>
+          <div style={{ marginTop: '6px', color: '#888' }}>財務整聊｜Howard 豪歐</div>
+        </div>
       </div>
-    </div>
+    </>
   )
 }

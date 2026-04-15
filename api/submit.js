@@ -1,7 +1,5 @@
-// api/submit.js — Vercel Serverless Function (Node.js)
-// POST /api/submit
-// Inserts form data into Supabase and returns { id }.
-// Claude report generation is triggered separately by api/generate.js.
+// api/submit.js — Vercel Serverless Function
+// POST /api/submit — saves form data to Supabase, returns { id }
 
 import { createClient } from '@supabase/supabase-js'
 
@@ -11,45 +9,50 @@ const supabase = createClient(
 )
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const body = req.body
-
-  const { data: row, error: insertErr } = await supabase
-    .from('finance_intakes')
+  const d = req.body
+  const { data: row, error } = await supabase
+    .from('finance_intakes_v2')
     .insert({
-      name:             body.name,
-      age:              Number(body.age) || null,
-      health:           body.health,
-      marital:          body.marital,
-      children:         Number(body.children) || 0,
-      dependents:       body.dependents,
-      occupation:       body.occupation,
-      income:           Number(body.income) || null,
-      income_type:      body.income_type,
-      monthly_expense:  Number(body.monthly_expense) || null,
-      savings_rate:     Number(body.savings_rate) || null,
-      emergency_months: Number(body.emergency_months) || null,
-      has_mortgage:     !!body.has_mortgage,
-      mortgage_amt:     Number(body.mortgage_amt) || null,
-      other_debt:       Number(body.other_debt) || null,
-      debt_notes:       body.debt_notes,
-      has_life:         !!body.has_life,
-      has_health:       !!body.has_health,
-      has_accident:     !!body.has_accident,
-      insurance_gap:    body.insurance_gap,
-      report_ready:     false,
+      name:              d.name,
+      birthday:          d.birthday,
+      city:              d.city,
+      occupation:        d.occupation,
+      income_range:      d.income_range,
+      primary_goal:      d.primary_goal,
+      retirement_age:    Number(d.retirement_age) || null,
+      retirement_monthly:d.retirement_monthly,
+      expense_pct:       Number(d.expense_pct) || 0,
+      investment_pct:    Number(d.investment_pct) || 0,
+      protection_pct:    Number(d.protection_pct) || 0,
+      has_property:      !!d.has_property,
+      properties:        d.properties || [],
+      debt_types:        d.debt_types || [],
+      total_debt:        Number(d.total_debt) || null,
+      monthly_debt:      Number(d.monthly_debt) || null,
+      has_life:          !!d.has_life,
+      life_coverage:     Number(d.life_coverage) || null,
+      has_medical:       !!d.has_medical,
+      medical_daily:     Number(d.medical_daily) || null,
+      has_accident:      !!d.has_accident,
+      accident_coverage: Number(d.accident_coverage) || null,
+      has_critical:      !!d.has_critical,
+      critical_coverage: Number(d.critical_coverage) || null,
+      monthly_premium:   Number(d.monthly_premium) || null,
+      risk_attitude:     d.risk_attitude,
+      contact_name:      d.contact_name,
+      phone:             d.phone,
+      line_id:           d.line_id,
     })
     .select('id')
     .single()
 
-  if (insertErr) {
-    console.error('[submit] Insert error:', insertErr.message)
-    return res.status(500).json({ error: 'DB insert failed', detail: insertErr.message })
+  if (error) {
+    console.error('[submit] error:', error.message)
+    return res.status(500).json({ error: error.message })
   }
 
-  console.log('[submit] Row inserted, id =', row.id)
+  console.log('[submit] saved id =', row.id)
   return res.status(200).json({ id: row.id })
 }
